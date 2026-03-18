@@ -1,4 +1,4 @@
-# Ultimate Queueing System Simulator ⏱️
+# Queueing System Simulator 
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue.svg?logo=python&logoColor=white) ![Tkinter](https://img.shields.io/badge/GUI-Tkinter-lightgrey.svg) ![Matplotlib](https://img.shields.io/badge/Data_Viz-Matplotlib-orange.svg) ![NumPy](https://img.shields.io/badge/Math-NumPy-013243.svg?logo=numpy&logoColor=white)
 
