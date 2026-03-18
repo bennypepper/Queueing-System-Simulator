@@ -25,8 +25,8 @@ Testing operational changes in the real world (like hiring more staff or alterin
 
 **1. Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/ultimate-queueing-simulator.git
-cd ultimate-queueing-simulator
+git clone https://github.com/bennypepper/Queueing-System-Simulator.git
+cd queueing-system-simulator
 ```
 
 **2. Install dependencies:**
