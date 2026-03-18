@@ -24,20 +24,20 @@ Testing operational changes in the real world (like hiring more staff or alterin
 ## 💻 How to Run Locally
 
 **1. Clone the repository:**
-\`\`\`bash
+```bash
 git clone https://github.com/yourusername/ultimate-queueing-simulator.git
 cd ultimate-queueing-simulator
-\`\`\`
+```
 
 **2. Install dependencies:**
-\`\`\`bash
+```bash
 pip install numpy matplotlib
-\`\`\`
+```
 
 **3. Launch the Simulator:**
-\`\`\`bash
+```bash
 python simulator.py
-\`\`\`
+```
 *(Ensure your Python installation includes Tkinter, which is typically bundled by default on Windows/macOS).*
 
 ## 📊 Using the Simulator (Example Scenario)
