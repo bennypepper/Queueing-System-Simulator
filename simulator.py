@@ -6,6 +6,7 @@ import numpy as np
 import csv
 import math
 from matplotlib.figure import Figure
+import scipy.stats as stt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class QueueingSystemSimulator:
@@ -29,6 +30,7 @@ class QueueingSystemSimulator:
         self.num_servers = p['num_servers']
         self.queue_capacity = p['capacity']
         self.priority_enabled = p.get('priority_enabled', False)
+        self.warmup_time = p.get('warmup_time', 0.0)
         self.interarrival_times = collections.deque(p['interarrivals'])
         self.service_times = collections.deque(p['services'])
         self.priorities = collections.deque(p['priorities'])
@@ -52,6 +54,7 @@ class QueueingSystemSimulator:
         self.num_delayed = 0
         self.area_under_Q_t = 0.0
         self.customers_served = 0
+        self.customers_served_after_warmup = 0
         self.customers_rejected = 0
         
         # --- Data Logging ---
@@ -79,10 +82,12 @@ class QueueingSystemSimulator:
     def _update_stats(self):
         """Updates area-based statistical counters before an event occurs."""
         if self.sim_clock > self.time_of_last_event:
-            time_since_last_event = self.sim_clock - self.time_of_last_event
-            num_busy_servers = sum(1 for s in self.servers if s['status'] == 'busy')
-            self.area_under_Q_t += (len(self.vip_queue) + len(self.regular_queue)) * time_since_last_event
-            self.total_server_busy_time += num_busy_servers * time_since_last_event
+            if self.sim_clock > self.warmup_time:
+                effective_last_event = max(self.time_of_last_event, self.warmup_time)
+                time_since_last_event = self.sim_clock - effective_last_event
+                num_busy_servers = sum(1 for s in self.servers if s['status'] == 'busy')
+                self.area_under_Q_t += (len(self.vip_queue) + len(self.regular_queue)) * time_since_last_event
+                self.total_server_busy_time += num_busy_servers * time_since_last_event
 
     def _arrival(self):
         """Handles a customer arrival, with priority and server logic."""
@@ -143,8 +148,11 @@ class QueueingSystemSimulator:
         self.servers[server_idx]['departure_time'] = self.sim_clock + service_time
         
         delay = self.sim_clock - arrival_time
-        self.total_delay += delay
-        if delay > 0: self.num_delayed += 1
+        
+        if arrival_time >= self.warmup_time:
+            self.total_delay += delay
+            self.customers_served_after_warmup += 1
+            if delay > 0: self.num_delayed += 1
         
         self.completed_customers_details.append({
             "id": cust_id, "arrival_time": arrival_time, "wait_delay": delay,
@@ -196,10 +204,10 @@ class QueueingSystemSimulator:
 
     def calculate_report(self):
         """Calculates and returns the final performance measures and costs."""
-        final_time = self.time_of_last_event
-        avg_delay = self.total_delay / self.num_delayed if self.num_delayed > 0 else 0.0
-        avg_num_in_queue = self.area_under_Q_t / final_time if final_time > 0 else 0.0
-        avg_server_utilization = self.total_server_busy_time / (self.num_servers * final_time) if final_time > 0 else 0.0
+        effective_time = max(0.0, self.time_of_last_event - self.warmup_time)
+        avg_delay = self.total_delay / self.customers_served_after_warmup if self.customers_served_after_warmup > 0 else 0.0
+        avg_num_in_queue = self.area_under_Q_t / effective_time if effective_time > 0 else 0.0
+        avg_server_utilization = self.total_server_busy_time / (self.num_servers * effective_time) if effective_time > 0 else 0.0
         
         total_wait_cost = self.total_delay * self.cost_wait_per_unit_time
         total_server_cost = self.total_server_busy_time * self.cost_server_per_unit_time
@@ -209,7 +217,8 @@ class QueueingSystemSimulator:
             "q(n)": avg_num_in_queue,
             "u(n)": avg_server_utilization,
             "Number of customers rejected": self.customers_rejected,
-            "Total simulation time T(n)": final_time,
+            "Total simulation time T(n)": self.time_of_last_event,
+            "Effective Time (Post-Warmup)": effective_time
         }
 
         if self.cost_wait_per_unit_time > 0 or self.cost_server_per_unit_time > 0:
@@ -240,8 +249,8 @@ class App(tk.Tk):
             'services': [2.0, 0.7, 0.2, 1.1, 3.7, 0.6],
             'priorities': ['regular'] * 6,
             'num_servers': 1, 'capacity': float('inf'),
-            'cost_wait': 0, 'cost_server': 0,
-            'priority_enabled': False
+            'cost_wait': 0.0, 'cost_server': 0.0,
+            'priority_enabled': False, 'warmup_time': 0.0, 'random_seed': 42
         }
         self.simulator = QueueingSystemSimulator(self.initial_params)
         
@@ -262,6 +271,7 @@ class App(tk.Tk):
             "u(n)": "u(n) - Utilization",
             "Number of customers rejected": "Rejected Customers",
             "Total simulation time T(n)": "T(n) - Total Time",
+            "Effective Time (Post-Warmup)": "Effective Time (Post-Warmup)"
         }
 
         self.create_widgets()
@@ -335,8 +345,8 @@ class App(tk.Tk):
 
         ui_mode_frame = ttk.LabelFrame(self.left_panel_container, text="UI Mode", style='Medium.TLabelframe')
         ui_mode_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Radiobutton(ui_mode_frame, text="Default", variable=self.ui_mode, value="Default", command=self.rebuild_ui, style='Medium.TRadiobutton').pack(side=tk.LEFT, padx=5)
-        ttk.Radiobutton(ui_mode_frame, text="Scientific", variable=self.ui_mode, value="Scientific", command=self.rebuild_ui, style='Medium.TRadiobutton').pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(ui_mode_frame, text="Default", variable=self.ui_mode, value="Default", command=self.update_ui, style='Medium.TRadiobutton').pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(ui_mode_frame, text="Scientific", variable=self.ui_mode, value="Scientific", command=self.update_ui, style='Medium.TRadiobutton').pack(side=tk.LEFT, padx=5)
 
         canvas = tk.Canvas(self.left_panel_container, bg=self.COLOR_BG_DARK, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.left_panel_container, orient="vertical", command=canvas.yview)
@@ -390,7 +400,7 @@ class App(tk.Tk):
         about_frame = ttk.Frame(about_window, padding="20", style='Medium.TFrame')
         about_frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(about_frame, text="Indomaret Queing System Simulator", font=('Segoe UI', 14, 'bold'), style='Medium.TLabel').pack(pady=(0, 20))
+        ttk.Label(about_frame, text="Queing System Simulator", font=('Segoe UI', 14, 'bold'), style='Medium.TLabel').pack(pady=(0, 20))
         
         info_frame = ttk.Frame(about_frame, style='Medium.TFrame')
         info_frame.pack(fill=tk.BOTH, expand=True)
@@ -402,7 +412,7 @@ class App(tk.Tk):
         ttk.Label(dev_frame, text="- Yudhistira Nalendra Aryadhewa Az-zhafir", style='Medium.TLabel').pack(anchor='w')
         
         ttk.Label(info_frame, text="Institution:", font=('Segoe UI', 10, 'bold'), style='Medium.TLabel').grid(row=1, column=0, sticky='nw', pady=(10,0), padx=5)
-        institution_label = ttk.Label(info_frame, text="Informatics Engineering Study Program 2023, Ma Chung University", style='Medium.TLabel', wraplength=320, justify=tk.LEFT)
+        institution_label = ttk.Label(info_frame, text="Informatics Engineering Study Program, Ma Chung University", style='Medium.TLabel', wraplength=320, justify=tk.LEFT)
         institution_label.grid(row=1, column=1, sticky='w', pady=(10,0), padx=5)
         
         ttk.Label(info_frame, text="Description:", font=('Segoe UI', 10, 'bold'), style='Medium.TLabel').grid(row=2, column=0, sticky='nw', pady=(10,0), padx=5)
@@ -462,18 +472,22 @@ class App(tk.Tk):
         
         self.gen_frame = ttk.LabelFrame(self.input_frame, text="General Settings", style='Medium.TLabelframe')
         self.gen_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Label(self.gen_frame, text="Number of Servers (c):", style='Medium.TLabel').grid(row=0, column=0, sticky='w', padx=5, pady=2)
-        self.num_servers_entry = ttk.Entry(self.gen_frame, width=10); self.num_servers_entry.grid(row=0, column=1, padx=5, pady=2); self.num_servers_entry.insert(0, "1")
-        ttk.Label(self.gen_frame, text="Queue Capacity (K):", style='Medium.TLabel').grid(row=1, column=0, sticky='w', padx=5, pady=2)
-        self.capacity_entry = ttk.Entry(self.gen_frame, width=10); self.capacity_entry.grid(row=1, column=1, padx=5, pady=2); self.capacity_entry.insert(0, "inf")
+        ttk.Label(self.gen_frame, text="Random Seed (Reproducibility):", style='Medium.TLabel').grid(row=0, column=0, sticky='w', padx=5, pady=2)
+        self.random_seed_entry = ttk.Entry(self.gen_frame, width=10); self.random_seed_entry.grid(row=0, column=1, padx=5, pady=2); self.random_seed_entry.insert(0, "42")
+        ttk.Label(self.gen_frame, text="Warm-up Time (T_w):", style='Medium.TLabel').grid(row=1, column=0, sticky='w', padx=5, pady=2)
+        self.warmup_time_entry = ttk.Entry(self.gen_frame, width=10); self.warmup_time_entry.grid(row=1, column=1, padx=5, pady=2); self.warmup_time_entry.insert(0, "0")
+        ttk.Label(self.gen_frame, text="Number of Servers (c):", style='Medium.TLabel').grid(row=2, column=0, sticky='w', padx=5, pady=2)
+        self.num_servers_entry = ttk.Entry(self.gen_frame, width=10); self.num_servers_entry.grid(row=2, column=1, padx=5, pady=2); self.num_servers_entry.insert(0, "1")
+        ttk.Label(self.gen_frame, text="Queue Capacity (K):", style='Medium.TLabel').grid(row=3, column=0, sticky='w', padx=5, pady=2)
+        self.capacity_entry = ttk.Entry(self.gen_frame, width=10); self.capacity_entry.grid(row=3, column=1, padx=5, pady=2); self.capacity_entry.insert(0, "inf")
         
         self.priority_enabled_var = tk.BooleanVar(value=False)
         self.priority_check = ttk.Checkbutton(self.gen_frame, text="Enable Customer Priority", variable=self.priority_enabled_var, command=self.toggle_priority_visibility, style='Medium.TCheckbutton')
-        self.priority_check.grid(row=2, column=0, columnspan=2, sticky='w', padx=5, pady=5)
+        self.priority_check.grid(row=4, column=0, columnspan=2, sticky='w', padx=5, pady=5)
 
         self.cost_enabled_var = tk.BooleanVar(value=False)
         self.cost_check = ttk.Checkbutton(self.gen_frame, text="Enable Cost Analysis", variable=self.cost_enabled_var, command=self.toggle_cost_visibility, style='Medium.TCheckbutton')
-        self.cost_check.grid(row=3, column=0, columnspan=2, sticky='w', padx=5, pady=5)
+        self.cost_check.grid(row=5, column=0, columnspan=2, sticky='w', padx=5, pady=5)
 
         self.cost_frame = ttk.LabelFrame(self.input_frame, text="Cost Analysis (per time unit)", style='Medium.TLabelframe')
         ttk.Label(self.cost_frame, text="Waiting Cost:", style='Medium.TLabel').grid(row=0, column=0, sticky='w', padx=5, pady=2)
@@ -839,9 +853,11 @@ class App(tk.Tk):
         
         self.after_id = self.after(int(self.speed_scale.get()), self.run_all_loop)
             
-    def get_params_from_ui(self):
+    def get_params_from_ui(self, override_seed=None):
         params = {}
         try:
+            params['random_seed'] = int(self.random_seed_entry.get())
+            params['warmup_time'] = float(self.warmup_time_entry.get())
             params['num_servers'] = int(self.num_servers_entry.get())
             capacity_str = self.capacity_entry.get().strip()
             params['capacity'] = float(capacity_str) if capacity_str.lower() != 'inf' else float('inf')
@@ -880,10 +896,22 @@ class App(tk.Tk):
             else: # Distribution mode
                 num_cust = int(self.num_customers_var.get())
                 if num_cust <= 0: raise ValueError("Number of customers for distribution must be positive.")
-                params['interarrivals'] = [random.expovariate(1.0/float(self.arrival_mean.get())) for _ in range(num_cust)]
-                params['services'] = [max(0, random.normalvariate(float(self.service_mean.get()), float(self.service_stdev.get()))) for _ in range(num_cust)]
+                
+                seed_val = override_seed if override_seed is not None else params['random_seed']
+                random.seed(seed_val)
+                
+                arr_mean = float(self.arrival_mean.get())
+                srv_mean = float(self.service_mean.get())
+                srv_std = float(self.service_stdev.get())
+                vip_pct = float(self.vip_percentage.get()) / 100.0
+                
+                mu_lognorm = math.log(srv_mean**2 / math.sqrt(srv_mean**2 + srv_std**2))
+                sigma_lognorm = math.sqrt(math.log(1 + (srv_std**2 / srv_mean**2)))
+                
+                params['interarrivals'] = [random.expovariate(1.0/arr_mean) for _ in range(num_cust)]
+                params['services'] = [random.lognormvariate(mu_lognorm, sigma_lognorm) for _ in range(num_cust)]
                 if params['priority_enabled']:
-                    params['priorities'] = ['vip' if random.random() < float(self.vip_percentage.get())/100 else 'regular' for _ in range(num_cust)]
+                    params['priorities'] = ['vip' if random.random() < vip_pct else 'regular' for _ in range(num_cust)]
                 else:
                     params['priorities'] = ['regular'] * num_cust
             
@@ -899,6 +927,11 @@ class App(tk.Tk):
         self.stop_all_tasks()
         params = self.get_params_from_ui()
         if params is None: return
+        
+        # Apply random seed
+        random.seed(params['random_seed'])
+        np.random.seed(params['random_seed'])
+        
         self.simulator.reset(params)
         self.log_text.configure(state='normal'); self.log_text.delete(1.0, tk.END); self.log_text.configure(state='disabled')
         self.report_text.configure(state='normal'); self.report_text.delete(1.0, tk.END); self.report_text.configure(state='disabled')
@@ -934,7 +967,11 @@ class App(tk.Tk):
         if not self.is_running_replications: return
 
         if self.replication_count < self.num_replications_total:
-            current_params = self.get_params_from_ui() if self.input_mode.get() == "Distribution" else self.base_params
+            seed_val = self.base_params['random_seed'] + self.replication_count
+            random.seed(seed_val)
+            np.random.seed(seed_val)
+            
+            current_params = self.get_params_from_ui(override_seed=seed_val) if self.input_mode.get() == "Distribution" else self.base_params
             if current_params is None:
                 self.stop_all_tasks()
                 return
@@ -963,7 +1000,11 @@ class App(tk.Tk):
         for key, values in self.replication_results.items():
             display_key = self.scientific_labels.get(key, key)
             mean = np.mean(values); stdev = np.std(values, ddof=1) if len(values) > 1 else 0
-            half_width = 1.96 * (stdev / math.sqrt(len(values))) if len(values) > 1 else 0
+            if len(values) > 1:
+                t_crit = stt.t.ppf(0.975, df=len(values)-1)
+                half_width = t_crit * (stdev / math.sqrt(len(values)))
+            else:
+                half_width = 0.0
             final_report += f"{display_key:<40} {mean:>15.4f} {stdev:>15.4f} {half_width:>20.4f}\n"
 
         self.replication_text.configure(state='normal'); self.replication_text.delete(1.0, tk.END)

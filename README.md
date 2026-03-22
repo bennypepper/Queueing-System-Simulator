@@ -11,34 +11,47 @@ Testing operational changes in the real world (like hiring more staff or alterin
 * **Language:** Python
 * **GUI Framework:** Tkinter
 * **Data Visualization:** Matplotlib (Real-time graphing)
-* **Data Processing:** NumPy, Collections, CSV
+* **Data Processing:** NumPy, SciPy, Collections, CSV
 
 ## 🚀 Key Features
 * **Multi-Server & Priority Queues:** Simulate any number of parallel servers and toggle VIP customer priorities, separating standard FIFO logic into distinct VIP vs. Regular queues.
 * **Cost Analysis:** Input abstract "Waiting Costs" and "Server Costs" to mathematically calculate the optimal trade-off between customer satisfaction and business overhead.
-* **Flexible Data Input:** Supports manual entry, CSV imports, or automated randomized distributions (Exponential for arrivals, Normal for service times).
+* **Flexible Data Input:** Supports manual entry, CSV imports, or automated randomized distributions (Exponential for arrivals, Lognormal for service times).
 * **Real-Time Visualization:** Watch the system dynamically update with visual representations of idle/busy servers, queue lengths, and live line charts for Q(t) and B(t).
 * **Statistical Replications:** Run the simulation hundreds of times automatically to generate a "Replication Report" featuring 95% Confidence Intervals (C.I. Half-Width) for rock-solid, data-driven decision making.
 * **Comprehensive Exporting:** Export event logs, customer statistics, and final system reports to `.csv`, or save the real-time plots as `.png` images.
 
 ## 💻 How to Run Locally
 
+You can run this project either as a local Desktop App or a Web Dashboard. Both share the exact same underlying mathematical engine.
+
 **1. Clone the repository:**
 ```bash
 git clone https://github.com/bennypepper/Queueing-System-Simulator.git
-cd queueing-system-simulator
+cd Queueing-System-Simulator
 ```
 
 **2. Install dependencies:**
 ```bash
-pip install numpy matplotlib
+pip install numpy scipy matplotlib streamlit
 ```
 
-**3. Launch the Simulator:**
+**3a. Launch the Desktop Simulator (Tkinter):**
 ```bash
 python simulator.py
 ```
-*(Ensure your Python installation includes Tkinter, which is typically bundled by default on Windows/macOS).*
+*(Ensure your Python installation includes Tkinter, which is typically bundled by default on Windows).*
+
+**3b. Launch the Web Dashboard (Streamlit):**
+```bash
+streamlit run app.py
+```
+
+## 📖 Technical Guidebook
+
+A comprehensive, mathematically detailed manual explaining the Discrete Event Simulation mechanisms, formulas, and real-world business applications of this software is provided.
+
+👉 **[Read the Full Guidebook (`guidebook.pdf`)](guidebook.pdf)**
 
 ## 📊 Using the Simulator (Example Scenario)
 To analyze whether adding a second barista to a cafe is cost-effective:
@@ -51,4 +64,4 @@ To analyze whether adding a second barista to a cafe is cost-effective:
 ## 👥 Authors
 * Benedict Michael Pepper
 * Yudhistira Nalendra Aryadhewa Az-zhafir
-* *Informatics Engineering, Ma Chung University (2023)*
+* *Informatics Engineering, Ma Chung University*
